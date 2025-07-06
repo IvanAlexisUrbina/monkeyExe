@@ -85,48 +85,77 @@ class WebBot:
             self.driver.execute_script("arguments[0].click();", boton_final)
             time.sleep(3)
 
-            print("🔍 PASO 9: Esperando carga de campos de tarjeta...")
+            print("🔍 PASO 9: Esperando carga de iframe...")
 
-            # Subir al inicio de la página (por si está oculto más abajo)
-            self.driver.execute_script("window.scrollTo(0, 0);")
-            time.sleep(2)
-
-            # Esperar que los campos estén presentes (espera extendida a 30s)
+            # Esperar iframe visible y hacer switch
             wait = WebDriverWait(self.driver, 30)
+            iframe = wait.until(EC.presence_of_element_located((By.ID, "paylands-card-frame")))
+            self.driver.switch_to.frame(iframe)
+
+            print("🔍 PASO 9.1: Esperando carga de campos de tarjeta dentro del iframe...")
             campo_tarjeta = wait.until(EC.presence_of_element_located((By.NAME, "cardPan")))
             campo_exp = wait.until(EC.presence_of_element_located((By.NAME, "cardExpireFull")))
             campo_cvv = wait.until(EC.presence_of_element_located((By.NAME, "cvv2")))
 
-            # Esperar que estén visibles e interactuables
-            wait.until(EC.element_to_be_clickable((By.NAME, "cardPan")))
-
-            # Scroll específico para asegurar visibilidad (más confiable que scrollTo(0, 0))
-            self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", campo_tarjeta)
-            time.sleep(1)
-
-            # Limpiar y llenar campo de tarjeta (type="phone" pero necesita número de tarjeta)
-            campo_tarjeta.clear()
             campo_tarjeta.send_keys("5306917110894537")
-            
-            campo_exp.clear()
             campo_exp.send_keys("12/26")
-            
-            campo_cvv.clear()
             campo_cvv.send_keys("914")
-
             print("✅ Campos de tarjeta llenados")
-            time.sleep(1)
 
-            print("🔍 PASO 10: Confirmando donación final...")
-            boton_donar = wait.until(EC.element_to_be_clickable(
-                (By.XPATH, "//button[contains(text(), 'UNA VEZ') and contains(text(), '$ 10.000')]")
-            ))
+            # # Regresar al documento principal
+            self.driver.switch_to.default_content()
+
+
+            print("🔍 PASO 10: Esperando botón final 'Una vez - $10.000' visible y habilitado...")
+
+            boton_xpath = "//button[@type='submit' and .//span[contains(text(), 'Una vez')]]"
+
+            # Esperar a que desaparezca cualquier overlay que tape el botón
+            try:
+                WebDriverWait(self.driver, 2).until(
+                    EC.invisibility_of_element_located((By.CSS_SELECTOR, "div[class*='loading'], div[class*='overlay'], .spinner"))
+                )
+                print("✅ Overlay desapareció.")
+            except:
+                print("⚠️ No se detectó overlay o ya desapareció.")
+
+            # Esperar que el botón aparezca visible
+            boton_donar = WebDriverWait(self.driver, 30).until(
+                EC.visibility_of_element_located((By.XPATH, boton_xpath))
+            )
+
+            # Esperar a que esté habilitado
+            WebDriverWait(self.driver, 30).until(lambda d: boton_donar.is_enabled())
+
+            # Asegurarse de que no tiene la clase `disabled` o atributo
+            boton_disabled_attr = boton_donar.get_attribute("disabled")
+            boton_class = boton_donar.get_attribute("class")
+            print(f"🔎 Estado del botón: disabled_attr={boton_disabled_attr}, class='{boton_class}'")
+
+            # Scroll y clic
             self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", boton_donar)
+            time.sleep(1)
             self.driver.execute_script("arguments[0].click();", boton_donar)
+            print("✅ Botón de donación final clickeado correctamente.")
             time.sleep(3)
 
-            print("✅ Proceso completado exitosamente")
+
+
+            print("🔍 PASO 11: Verificando resultado de la transacción...")
+
+            try:
+                # Espera mensaje de error hasta 10 segundos
+                error_msg = WebDriverWait(self.driver, 10).until(
+                    EC.visibility_of_element_located((
+                        By.XPATH, "//*[contains(@class, 'text-red') or contains(@class, 'text-danger') or contains(text(), 'rechazada')]"
+                    ))
+                )
+                print(f"❌ Donación rechazada: {error_msg.text}")
+            except:
+                print("✅ Donación aprobada (no se detectó mensaje de error)")
+
             return True
+
 
         except Exception as e:
             print(f"❌ ERROR ESPECÍFICO: {e}")
