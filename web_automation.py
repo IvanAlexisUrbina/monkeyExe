@@ -130,11 +130,38 @@ class WebBot:
             
             time.sleep(0.5)
             
-            # Llenar email lentamente
-            email_field = self.driver.find_element(By.NAME, "email")
-            for char in datos['email']:
-                email_field.send_keys(char)
-                time.sleep(0.08)
+            # Llenar email lentamente y verificar si es válido
+            max_intentos_email = 5
+            for intento in range(max_intentos_email):
+                email_field = self.driver.find_element(By.NAME, "email")
+                email_field.clear()
+                
+                # Si no es el primer intento, generar un nuevo email
+                if intento > 0:
+                    datos = self.generate_random_data()
+                    print(f"[INFO] Regenerando email, intento {intento+1}: {datos['email']}")
+                
+                # Escribir el email lentamente
+                for char in datos['email']:
+                    email_field.send_keys(char)
+                    time.sleep(0.08)
+                
+                # Esperar un momento para ver si aparece mensaje de error
+                time.sleep(1)
+                
+                # Verificar si hay mensaje de error de email
+                try:
+                    error_elements = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'email') and (contains(text(), 'inválido') or contains(text(), 'invalido') or contains(text(), 'incorrecto'))]")
+                    if not error_elements:
+                        # No hay error, continuar
+                        break
+                    else:
+                        print(f"[WARN] Email inválido detectado: {datos['email']}")
+                        if intento == max_intentos_email - 1:
+                            print(f"[ERROR] No se pudo generar un email válido después de {max_intentos_email} intentos")
+                except Exception as e:
+                    # Si hay error al buscar, asumimos que no hay problema
+                    break
             
             time.sleep(0.5)
             

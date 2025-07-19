@@ -144,29 +144,26 @@ class BotApp:
         threading.Thread(target=self.execute_verification, daemon=True).start()
     
     def execute_verification(self):
-        bot = None
         try:
-            
             # Configurar progress bar
             total_cards = len(self.tarjetas)
             self.root.after(0, lambda: self.progress.config(maximum=total_cards))
-            self.root.after(0, lambda: self.status_label.config(text="Iniciando navegador...", fg="blue"))
+            self.resultados = []
             
-            # Inicializar bot
-            bot = WebBot(browser_type="chrome", headless=False)
-            
-            if bot.start_browser():
-                self.root.after(0, lambda: self.status_label.config(text="Navegador iniciado correctamente", fg="green"))
-                self.resultados = []
-                
-                for i, tarjeta in enumerate(self.tarjetas):
-                    try:
-                        # Actualizar status
-                        self.root.after(0, lambda i=i: self.status_label.config(text=f"Verificando tarjeta {i+1}/{total_cards}: {tarjeta[0][:4]}****", fg="blue"))
-                        self.root.after(0, lambda i=i: self.progress.config(value=i+1))
-                        
-                        print(f"\n[INFO] Procesando tarjeta {i+1}: {tarjeta}")
-                        
+            # Procesar cada tarjeta en una nueva ventana
+            for i, tarjeta in enumerate(self.tarjetas):
+                try:
+                    # Actualizar status
+                    self.root.after(0, lambda i=i: self.status_label.config(text=f"Verificando tarjeta {i+1}/{total_cards}: {tarjeta[0][:4]}****", fg="blue"))
+                    self.root.after(0, lambda i=i: self.progress.config(value=i+1))
+                    
+                    print(f"\n[INFO] Procesando tarjeta {i+1}: {tarjeta}")
+                    
+                    # Inicializar un nuevo bot para cada tarjeta
+                    self.root.after(0, lambda: self.status_label.config(text=f"Iniciando navegador para tarjeta {i+1}...", fg="blue"))
+                    bot = WebBot(browser_type="chrome", headless=False)
+                    
+                    if bot.start_browser():
                         # Verificar tarjeta
                         success = bot.donar_una_vez(*tarjeta)
                         estado = "LIVE" if success else "DEATH"
@@ -188,32 +185,38 @@ class BotApp:
                         # Actualizar tabla
                         self.root.after(0, lambda r=resultado: self.add_result_to_tree(r))
                         
-                        # Pausa entre tarjetas
-                        time.sleep(2)
-                        
-                    except Exception as card_error:
-                        print(f"[ERROR] Error procesando tarjeta {i+1}: {card_error}")
+                        # Cerrar navegador
+                        bot.close_browser()
+                        print(f"[INFO] Navegador cerrado para tarjeta {i+1}")
+                    else:
+                        print(f"[ERROR] No se pudo iniciar navegador para tarjeta {i+1}")
                         resultado = list(tarjeta) + ["ERROR"]
                         self.resultados.append(resultado)
                         self.root.after(0, lambda r=resultado: self.add_result_to_tree(r))
-                
-                self.root.after(0, lambda: self.status_label.config(text="Verificación completada", fg="green"))
-            else:
-                self.root.after(0, lambda: messagebox.showerror("Error", "No se pudo iniciar el navegador"))
+                    
+                    # Pausa entre tarjetas
+                    time.sleep(1)
+                    
+                except Exception as card_error:
+                    print(f"[ERROR] Error procesando tarjeta {i+1}: {card_error}")
+                    resultado = list(tarjeta) + ["ERROR"]
+                    self.resultados.append(resultado)
+                    self.root.after(0, lambda r=resultado: self.add_result_to_tree(r))
+                    
+                    # Intentar cerrar el navegador si hubo error
+                    try:
+                        if 'bot' in locals() and bot and bot.driver:
+                            bot.close_browser()
+                    except:
+                        pass
+            
+            self.root.after(0, lambda: self.status_label.config(text="Verificación completada", fg="green"))
                 
         except Exception as e:
             print(f"[ERROR] Error general: {e}")
             import traceback
             traceback.print_exc()
             self.root.after(0, lambda: messagebox.showerror("Error", f"Error inesperado: {e}"))
-        finally:
-            # Asegurar que el navegador se cierre correctamente
-            if bot and bot.driver:
-                try:
-                    bot.close_browser()
-                    print("[INFO] Navegador cerrado correctamente")
-                except:
-                    print("[WARN] Error cerrando navegador")
     
     def add_result_to_tree(self, resultado):
         # Configurar colores según el estado
